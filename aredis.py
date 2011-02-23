@@ -21,19 +21,13 @@ class HandlerError(Error): pass
 
 class Redis(asyncore.dispatcher):
     terminator = "\r\n"
-    replytypes = {
-        '+': "singleline",
-        '-': "error",
-        ':': "integer",
-        '$': "bulk",
-        '*': "multibulk",
-    }
+    replyhandlers = {}
 
     def __init__(self, sock=None, map=None):
         asyncore.dispatcher.__init__(self, sock=sock, map=map)
         self.outbuf = ''
         self.inbuf = ''
-        self.replytype = None
+        self.replyhandler = None
 
     def connect(self, host="localhost", port=6379, db=0):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -90,18 +84,31 @@ class Redis(asyncore.dispatcher):
 
     def handle_read(self):
         chunk = self.recv(8192)
-        if self.replytype is None:
-            # XXX: Handle unknown reply type.
-            self.replytype = self.replytypes[chunk[0]]
+        if self.replyhandler is None:
+            try:
+                self.replyhandler = self.replyhandlers[chunk[0]]
+            except KeyError:
+                raise HandlerError(
+                        "unrecognized handler for reply type %r" % chunk[0])
             chunk = chunk[1:]
 
-        if self.replytype is "singleline":
-            idx = chunk.find(self.terminator)
-            if idx >= 0:
-                reply = self.inbuf + chunk[:idx]
-                chunk = chunk[idx:]
-                logging.getLogger("%s.protocol.receive" % log.name).debug(
-                    reply)
+        self.replyhandler(self, chunk)
+
+    def handle_singleline_reply(self, chunk):
+        idx = chunk.find(self.terminator)
+        if idx >= 0:
+            reply = self.inbuf + chunk[:idx]
+            chunk = chunk[idx:]
+            logging.getLogger("%s.protocol.receive" % log.name).debug(
+                reply)
+
+    replyhandlers = {
+        '+': handle_singleline_reply,
+        #'-': handle_error_reply,
+        #':': handle_integer_reply,
+        #'$': handle_bulk_reply,
+        #'*': handle_multibulk_reply,
+    }
 
 def parseargs(argv):
     """Parse command line arguments.
