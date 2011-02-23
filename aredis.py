@@ -40,15 +40,17 @@ class Redis(asyncore.dispatcher):
         self.multireply = None
         self.multireplylen = None
         self.reply = None
+        self.callbacks = []
 
-    def connect(self, host="localhost", port=6379, db=0):
+    def connect(self, host="localhost", port=6379, db=0, callback=None):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         asyncore.dispatcher.connect(self, (host, port))
         self.socket.setblocking(0)
         self.set_socket(self.socket, self._map)
         log.debug("connected to %s:%d/%d", host, port, db)
+        self.callbacks = [callback]
 
-    def do(self, command, *args):
+    def do(self, callback, command, *args):
         arglen = 1 + len(args)
 
         request = ["*%d" % arglen]
@@ -66,6 +68,7 @@ class Redis(asyncore.dispatcher):
         request = self.terminator.join(request)
         getLogger("%s.wire.send" % name).debug("%r", request)
 
+        self.callbacks.insert(1, callback)
         self.outbuf += request
 
     def log(self, message):
@@ -122,7 +125,9 @@ class Redis(asyncore.dispatcher):
                 self.dispatch()
 
     def handle_reply(self):
-        pass
+        callback = self.callbacks.pop()
+        if callback is not None:
+            callback(self.reply)
 
     def handle_singleline_reply(self):
         idx = self.inbuf.find(self.terminator)
@@ -284,10 +289,10 @@ def main(argv, stdin=None, stdout=None, stderr=None):
 
     db = Redis()
     db.connect()
-    db.do("SELECT", 0)
-    db.do("LPUSH", "lrange", "foo")
-    db.do("LRANGE", "lrange", 0, 1)
-    db.do("LLEN", "lrange")
+    db.do(lambda r: log.debug("SELECT %r", r), "SELECT", 0)
+    db.do(None, "LPUSH", "lrange", "foo")
+    db.do(lambda r: log.debug("LRANGE %r", r), "LRANGE", "lrange", 0, 1)
+    db.do(None, "LLEN", "lrange")
 
     asyncore.loop()
 
