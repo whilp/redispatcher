@@ -21,6 +21,7 @@ wirelog = logging.getLogger("%s.wire" % __name__)
 
 class Error(Exception): pass
 class HandlerError(Error): pass
+class ReplyError(Error): pass
 
 class Redis(asyncore.dispatcher):
     terminator = "\r\n"
@@ -120,8 +121,11 @@ class Redis(asyncore.dispatcher):
         getLogger("%s.protocol.receive" % name).debug("%r", reply.strip())
 
         return reply
+    
+    def handle_error_reply(self):
+        reply = self.handle_singleline_reply()[4:]
+        raise ReplyError(reply)
 
-    handle_error_reply = None
     handle_integer_reply = None
     handle_bulk_reply = None
     handle_multibulk_reply = None
@@ -199,6 +203,8 @@ def main(argv, stdin=None, stdout=None, stderr=None):
     db = Redis()
     db.connect()
     db.do("SELECT", 0)
+    db.do("SET", "foo", "bar")
+    db.do("SADD", "foo", "baz")
 
     asyncore.loop()
 
