@@ -1,5 +1,7 @@
+import asyncore
 import logging
 import optparse
+import socket
 import sys
 
 try:
@@ -10,6 +12,66 @@ except AttributeError:
 
 log = logging.getLogger(__name__)
 log.addHandler(NullHandler())
+
+protolog = logging.getLogger("%s.protocol" % __name__)
+wirelog = logging.getLogger("%s.wire" % __name__)
+
+class Redis(asyncore.dispatcher):
+    terminator = "\r\n"
+    replytypes = {
+        '+': "singleline",
+        '-': "error",
+        ':': "integer",
+        '$': "bulk",
+        '*': "multibulk",
+    }
+
+    def __init__(self, sock=None, map=None):
+        asyncore.dispatcher.__init__(self, sock=sock, map=map)
+        self.outbuf = ''
+        self.inbuf = ''
+
+    def connect(self, host="localhost", port=6379, db=0):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        asyncore.dispatcher.connect(self, (host, port))
+        self.socket.setblocking(0)
+        self.set_socket(self.socket, self._map)
+        log.debug("connected to %s:%d/%d", host, port, db)
+
+    def do(self, command, *args):
+        arglen = 1 + len(args)
+
+        request = ["*%d" % arglen]
+        for arg in (command,) + args:
+            arg = str(arg)
+            request.extend(["$%d" % len(arg), arg])
+        request.append('')
+
+        msg = ["%s"]
+        msg.extend("%r" for arg in args)
+        logging.getLogger("%s.protocol.send" % log.name).debug(
+            ' '.join(msg), command, *args)
+
+        request = self.terminator.join(request)
+        logging.getLogger("%s.write.send" % log.name).debug(
+            "%r", request)
+
+        self.outbuf += request
+
+    def log(self, message):
+        log.debug(message)
+
+    def log_info(self, message, type=None):
+        log.debug(message)
+
+    def writable(self):
+        return self.outbuf and True
+
+    def handle_connect(self): pass
+
+    def handle_write(self):
+        sent = self.send(self.outbuf)
+        self.outbuf = self.outbuf[sent:]
 
 def parseargs(argv):
     """Parse command line arguments.
@@ -72,6 +134,13 @@ def main(argv, stdin=None, stdout=None, stderr=None):
     handler.setFormatter(logging.Formatter(format))
     log.addHandler(handler)
     log.setLevel(level)
+
+    db = Redis()
+    db.connect()
+    db.do("SELECT", 0)
+    db.do("SET", "mykey", "myvalue")
+
+    asyncore.loop()
 
 if __name__ == "__main__": # pragma: nocover
     try:
