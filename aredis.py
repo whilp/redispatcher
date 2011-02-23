@@ -13,6 +13,9 @@ except AttributeError:
 log = logging.getLogger(__name__)
 log.addHandler(NullHandler())
 
+getLogger = logging.getLogger
+name = log.name
+
 protolog = logging.getLogger("%s.protocol" % __name__)
 wirelog = logging.getLogger("%s.wire" % __name__)
 
@@ -47,12 +50,12 @@ class Redis(asyncore.dispatcher):
 
         msg = ["%s"]
         msg.extend("%r" for arg in args)
-        logging.getLogger("%s.protocol.send" % log.name).debug(
+
+        getLogger("%s.protocol.send" % name).debug(
             ' '.join(msg), command, *args)
 
         request = self.terminator.join(request)
-        logging.getLogger("%s.write.send" % log.name).debug(
-            "%r", request)
+        getLogger("%s.wire.send" % name).debug("%r", request)
 
         self.outbuf += request
 
@@ -166,7 +169,7 @@ def main(argv, stdin=None, stdout=None, stderr=None):
         level = logging.CRITICAL + 1
     level = max(1, level)
 
-    format = "%(message)s"
+    format = "%(name)s %(message)s"
     handler = logging.StreamHandler(stderr)
     handler.setFormatter(logging.Formatter(format))
     log.addHandler(handler)
