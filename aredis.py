@@ -76,6 +76,14 @@ class Redis(asyncore.dispatcher):
     def handle_close(self):
         self.close()
 
+    def handle_error(self):
+        t, v, tb = sys.exc_info()
+
+        if isinstance(v, HandlerError):
+            log.info(v.args[0])
+        else:
+            asyncore.dispatcher.handle_error(self)
+
     def handle_write(self):
         sent = self.send(self.outbuf)
         self.outbuf = self.outbuf[sent:]
