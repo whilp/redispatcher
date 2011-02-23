@@ -88,8 +88,9 @@ class Redis(asyncore.dispatcher):
     def handle_read(self):
         chunk = self.recv(8192)
         if self.replyhandler is None:
+            firstbyte = self.inbuf and self.inbuf[0] or chunk[0]
             try:
-                self.replyhandler = self.replyhandlers[chunk[0]]
+                self.replyhandler = self.replyhandlers[firstbyte]
             except KeyError:
                 raise HandlerError(
                         "unrecognized handler for reply type %r" % chunk[0])
@@ -98,12 +99,16 @@ class Redis(asyncore.dispatcher):
         self.replyhandler(self, chunk)
 
     def handle_singleline_reply(self, chunk):
-        idx = chunk.find(self.terminator)
-        if idx >= 0:
-            reply = self.inbuf + chunk[:idx]
-            chunk = chunk[idx:]
-            logging.getLogger("%s.protocol.receive" % log.name).debug(
-                reply)
+        self.inbuf += chunk
+        idx = self.inbuf.find(self.terminator)
+        if idx < 0:
+            return
+
+        reply = self.inbuf[:idx]
+        self.inbuf = self.inbuf[idx + len(self.terminator):]
+        name = log.name
+        getLogger("%s.wire.receive" % name).debug("%r", reply)
+        getLogger("%s.protocol.receive" % name).debug("%r", reply.strip())
 
     replyhandlers = {
         '+': handle_singleline_reply,
