@@ -105,7 +105,8 @@ class Redis(asyncore.dispatcher):
 
         if self.replyhandler(self) is not None:
             self.replyhandler = None
-            self.dispatch()
+            if self.inbuf:
+                self.dispatch()
 
     def handle_singleline_reply(self):
         idx = self.inbuf.find(self.terminator)
