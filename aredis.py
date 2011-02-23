@@ -23,6 +23,8 @@ class Error(Exception): pass
 class HandlerError(Error): pass
 class ReplyError(Error): pass
 
+Nil = object()
+
 class Redis(asyncore.dispatcher):
     terminator = "\r\n"
     replyhandlers = {}
@@ -141,17 +143,23 @@ class Redis(asyncore.dispatcher):
                 self.inbuf = self.inbuf[idx + len(self.terminator):]
                 self.replylen = int(replylen)
 
-        if self.replylen is None or (len(self.inbuf) - 2) < self.replylen:
-            return
-        reply = self.inbuf[:self.replylen]
-        self.inbuf = self.inbuf[self.replylen + len(self.terminator):]
-
         name = log.name
-        getLogger("%s.wire.receive" % name).debug("%r",
-                self.terminator.join((
-                    "%s%s" % (self.firstbyte, self.replylen),
-                    reply, "")))
-        getLogger("%s.protocol.receive" % name).debug("%r", reply)
+        if self.replylen == -1:
+            reply = Nil
+            getLogger("%s.wire.receive" % name).debug("%r",
+                    "%s%d%s" % (self.firstbyte, -1, self.terminator))
+        elif self.replylen is None or (len(self.inbuf) - 2) < self.replylen:
+            return
+        else:
+            reply = self.inbuf[:self.replylen]
+            self.inbuf = self.inbuf[self.replylen + len(self.terminator):]
+            getLogger("%s.wire.receive" % name).debug("%r",
+                    self.terminator.join((
+                        "%s%s" % (self.firstbyte, self.replylen),
+                        reply, "")))
+
+        getLogger("%s.protocol.receive" % name).debug("%s",
+                reply is Nil and "nil" or repr(reply))
 
         return reply
 
