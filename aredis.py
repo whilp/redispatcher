@@ -70,6 +70,9 @@ class Redis(asyncore.dispatcher):
 
     def handle_connect(self): pass
 
+    def handle_close(self):
+        self.close()
+
     def handle_write(self):
         sent = self.send(self.outbuf)
         self.outbuf = self.outbuf[sent:]
