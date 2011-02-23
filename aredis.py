@@ -1,8 +1,12 @@
 import asyncore
 import logging
 import optparse
+import shlex
 import socket
 import sys
+import time
+
+import hiredis
 
 try:
     NullHandler = logging.NullHandler
@@ -13,63 +17,50 @@ except AttributeError:
 log = logging.getLogger(__name__)
 log.addHandler(NullHandler())
 
-getLogger = logging.getLogger
-name = log.name
+def wirecmd(command, args, separator="\r\n"):
+    arglen = 1 + len(args)
+    parts = ["*%d" % arglen]
+    for arg in (command,) + args:
+        arg = str(arg)
+        parts.extend(["$%d" % len(arg), arg])
+    parts.append('')
 
-protolog = logging.getLogger("%s.protocol" % __name__)
-wirelog = logging.getLogger("%s.wire" % __name__)
+    return separator.join(parts)
 
-class Error(Exception): pass
-class HandlerError(Error): pass
-class ReplyError(Error): pass
+def fmtcmd(command, args, separator=' '):
+    parts = ["%s"]
+    parts.extend("%r" for arg in args)
+    return ' '.join(parts)
 
-Nil = object()
-Done = True
+def logcmd(name, command, args, log=None, level=logging.DEBUG):
+    parts = ["%s"]
+    parts.extend("%r" for arg in args)
+
+    if name is not None:
+        log = logging.getLogger(name)
+    log.log(level, fmtcmd(command, args), command, *args)
 
 class Redis(asyncore.dispatcher):
     terminator = "\r\n"
-    replyhandlers = {}
 
     def __init__(self, sock=None, map=None):
         asyncore.dispatcher.__init__(self, sock=sock, map=map)
-        self.outbuf = ''
-        self.inbuf = ''
-        self.replyhandler = None
-        self.firstbyte = None
-        self.replylen = None
-        self.multireply = None
-        self.multireplylen = None
-        self.reply = None
         self.callbacks = []
+        self.buffer = ''
+        self.reader = hiredis.Reader()
 
-    def connect(self, host="localhost", port=6379, db=0, callback=None):
+    def connect(self, host="localhost", port=6379, db=0, callback=None, data=None):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         asyncore.dispatcher.connect(self, (host, port))
         self.socket.setblocking(0)
         self.set_socket(self.socket, self._map)
         log.debug("connected to %s:%d/%d", host, port, db)
-        self.callbacks = [callback]
+        self.callbacks = [("CONNECT", (), callback, data)]
 
-    def do(self, callback, command, *args):
-        arglen = 1 + len(args)
-
-        request = ["*%d" % arglen]
-        for arg in (command,) + args:
-            arg = str(arg)
-            request.extend(["$%d" % len(arg), arg])
-        request.append('')
-
-        msg = ["%s"]
-        msg.extend("%r" for arg in args)
-
-        getLogger("%s.protocol.send" % name).debug(
-            ' '.join(msg), command, *args)
-
-        request = self.terminator.join(request)
-        getLogger("%s.wire.send" % name).debug("%r", request)
-
-        self.callbacks.insert(1, callback)
-        self.outbuf += request
+    def do(self, callback, data, command, *args):
+        self.log_send(command, args)
+        self.buffer += wirecmd(command, args, separator=self.terminator)
+        self.callbacks.insert(1, (command, args, callback, data))
 
     def log(self, message):
         log.debug(message)
@@ -77,153 +68,37 @@ class Redis(asyncore.dispatcher):
     def log_info(self, message, type=None):
         log.debug(message)
 
-    def writable(self):
-        return self.outbuf and True
+    def log_send(self, command, args):
+        logcmd("%s.client.tx" % __name__, command, args)
+
+    def log_recv(self, reply):
+        logging.getLogger("%s.client.rx" % __name__).debug("%r", reply)
 
     def handle_connect(self): pass
 
     def handle_close(self):
         self.close()
 
-    def handle_error(self):
-        t, v, tb = sys.exc_info()
-
-        if isinstance(v, HandlerError):
-            log.info(v.args[0])
-        else:
-            asyncore.dispatcher.handle_error(self)
-
     def handle_write(self):
-        sent = self.send(self.outbuf)
-        self.outbuf = self.outbuf[sent:]
+        sent = self.send(self.buffer)
+        self.buffer = self.buffer[sent:]
 
     def handle_read(self):
-        chunk = self.recv(8192)
-        self.inbuf += chunk
-        if self.inbuf:
-            self.dispatch()
+        self.reader.feed(self.recv(8192))
 
-    def dispatch(self):
-        if self.replyhandler is None:
-            self.firstbyte = self.inbuf[0]
+        while True:
             try:
-                self.replyhandler = self.replyhandlers[self.firstbyte]
-            except KeyError:
-                pass
-            if self.replyhandler is None:
-                raise HandlerError(
-                        "unrecognized handler for reply type %r" % self.firstbyte)
-            self.inbuf = self.inbuf[1:]
+                reply = self.reader.gets()
+            except hiredis.ProtocolError:
+                self.close()
+                raise
+            if reply is False:
+                return
 
-        result = self.replyhandler(self)
-        if self.reply is not None:
-            self.handle_reply()
-            self.reply = None
-        if result is Done:
-            self.replyhandler = None
-            if self.inbuf:
-                self.dispatch()
-
-    def handle_reply(self):
-        callback = self.callbacks.pop()
-        if callback is not None:
-            callback(self.reply)
-
-    def handle_singleline_reply(self):
-        idx = self.inbuf.find(self.terminator)
-        if idx < 0:
-            return
-
-        reply = self.inbuf[:idx]
-        self.inbuf = self.inbuf[idx + len(self.terminator):]
-        name = log.name
-        getLogger("%s.wire.receive" % name).debug("%r",
-                "%s%s%s" % (self.firstbyte, reply, self.terminator))
-        getLogger("%s.protocol.receive" % name).debug("%r", reply.strip())
-
-        self.reply = reply
-        return Done
-    
-    def handle_error_reply(self):
-        ret = self.handle_singleline_reply()
-        if self.reply is not None:
-            self.reply = ReplyError(self.reply[4:])
-        return ret
-
-    def handle_integer_reply(self):
-        ret = self.handle_singleline_reply()
-        if self.reply is not None:
-            self.reply = int(self.reply)
-        return ret
-
-    def handle_bulk_reply(self):
-        if self.replylen is None:
-            idx = self.inbuf.find(self.terminator)
-            if idx > 0:
-                replylen = self.inbuf[:idx]
-                self.inbuf = self.inbuf[idx + len(self.terminator):]
-                self.replylen = int(replylen)
-
-        name = log.name
-        if self.replylen == -1:
-            reply = Nil
-            getLogger("%s.wire.receive" % name).debug("%r",
-                    "%s%d%s" % (self.firstbyte, -1, self.terminator))
-        elif self.replylen is None or (len(self.inbuf) - 2) < self.replylen:
-            return
-        else:
-            reply = self.inbuf[:self.replylen]
-            self.inbuf = self.inbuf[self.replylen + len(self.terminator):]
-            getLogger("%s.wire.receive" % name).debug("%r",
-                    self.terminator.join((
-                        "%s%s" % (self.firstbyte, self.replylen),
-                        reply, "")))
-
-        getLogger("%s.protocol.receive" % name).debug("%s",
-                reply is Nil and "nil" or repr(reply))
-
-        self.replylen = None
-        if self.multireply is not None:
-            self.multireply.append(reply)
-            self.multireplylen -= 1
-            if self.multireplylen == 0:
-                self.reply = self.multireply
-                self.multireply = None
-                self.multireplylen = None
-            return Done
-        else:
-            self.reply = reply
-            return Done
-
-    def handle_multibulk_reply(self):
-        if self.multireplylen is None:
-            idx = self.inbuf.find(self.terminator)
-            if idx > 0:
-                multireplylen = self.inbuf[:idx]
-                self.inbuf = self.inbuf[idx + len(self.terminator):]
-                self.multireplylen = int(multireplylen)
-                self.multireply = []
-
-        if self.multireplylen == 0:
-            reply = []
-            getLogger("%s.wire.receive" % name).debug(
-                "%s",
-                "%s%s%r" % (self.firstbyte, self.multireplylen, self.terminator))
-            getLogger("%s.protocol.receive" % name).debug(
-                "%r", reply)
-            self.reply = reply
-            return Done
-
-        self.replyhandler = self.handle_bulk_reply
-        return Done
-
-    replyhandlers = {
-        '+': handle_singleline_reply,
-        '-': handle_error_reply,
-        ':': handle_integer_reply,
-        '$': handle_bulk_reply,
-        '*': handle_multibulk_reply,
-    }
+            self.log_recv(reply)
+            command, args, callback, data = self.callbacks.pop()
+            if callback is not None:
+                callback(command, args, data, reply)
 
 def parseargs(argv):
     """Parse command line arguments.
@@ -289,10 +164,18 @@ def main(argv, stdin=None, stdout=None, stderr=None):
 
     db = Redis()
     db.connect()
-    db.do(lambda r: log.debug("SELECT %r", r), "SELECT", 0)
-    db.do(None, "LPUSH", "lrange", "foo")
-    db.do(lambda r: log.debug("LRANGE %r", r), "LRANGE", "lrange", 0, 1)
-    db.do(None, "LLEN", "lrange")
+
+    def cb_log(command, args, data, reply):
+        (start,) = data
+        seconds = time.time() - start
+        cmd = fmtcmd(command, args) % ((command,) + args)
+        log.debug("Ran %s in %g seconds", cmd, seconds)
+
+    for line in stdin:
+        splitted = shlex.split(line)
+        command = splitted[0]
+        args = splitted[1:]
+        db.do(cb_log, (time.time(),), command, *args)
 
     asyncore.loop()
 
