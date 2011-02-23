@@ -24,6 +24,7 @@ class HandlerError(Error): pass
 class ReplyError(Error): pass
 
 Nil = object()
+Done = True
 
 class Redis(asyncore.dispatcher):
     terminator = "\r\n"
@@ -38,6 +39,7 @@ class Redis(asyncore.dispatcher):
         self.replylen = None
         self.multireply = None
         self.multireplylen = None
+        self.reply = None
 
     def connect(self, host="localhost", port=6379, db=0):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -110,10 +112,17 @@ class Redis(asyncore.dispatcher):
                         "unrecognized handler for reply type %r" % self.firstbyte)
             self.inbuf = self.inbuf[1:]
 
-        if self.replyhandler(self) is not None:
+        result = self.replyhandler(self)
+        if self.reply is not None:
+            self.handle_reply()
+            self.reply = None
+        if result is Done:
             self.replyhandler = None
             if self.inbuf:
                 self.dispatch()
+
+    def handle_reply(self):
+        pass
 
     def handle_singleline_reply(self):
         idx = self.inbuf.find(self.terminator)
@@ -127,15 +136,20 @@ class Redis(asyncore.dispatcher):
                 "%s%s%s" % (self.firstbyte, reply, self.terminator))
         getLogger("%s.protocol.receive" % name).debug("%r", reply.strip())
 
-        return reply
+        self.reply = reply
+        return Done
     
     def handle_error_reply(self):
-        reply = self.handle_singleline_reply()[4:]
-        raise ReplyError(reply)
+        ret = self.handle_singleline_reply()
+        if self.reply is not None:
+            self.reply = ReplyError(self.reply[4:])
+        return ret
 
     def handle_integer_reply(self):
-        reply = self.handle_singleline_reply()
-        return int(reply)
+        ret = self.handle_singleline_reply()
+        if self.reply is not None:
+            self.reply = int(self.reply)
+        return ret
 
     def handle_bulk_reply(self):
         if self.replylen is None:
@@ -168,12 +182,13 @@ class Redis(asyncore.dispatcher):
             self.multireply.append(reply)
             self.multireplylen -= 1
             if self.multireplylen == 0:
-                reply = self.multireply
+                self.reply = self.multireply
                 self.multireply = None
                 self.multireplylen = None
-            return reply
+            return Done
         else:
-            return reply
+            self.reply = reply
+            return Done
 
     def handle_multibulk_reply(self):
         if self.multireplylen is None:
@@ -191,10 +206,11 @@ class Redis(asyncore.dispatcher):
                 "%s%s%r" % (self.firstbyte, self.multireplylen, self.terminator))
             getLogger("%s.protocol.receive" % name).debug(
                 "%r", reply)
-            return reply
+            self.reply = reply
+            return Done
 
         self.replyhandler = self.handle_bulk_reply
-        return []
+        return Done
 
     replyhandlers = {
         '+': handle_singleline_reply,
@@ -269,8 +285,9 @@ def main(argv, stdin=None, stdout=None, stderr=None):
     db = Redis()
     db.connect()
     db.do("SELECT", 0)
-    db.do("SET", "foo", "bar")
-    db.do("SADD", "foo", "baz")
+    db.do("LPUSH", "lrange", "foo")
+    db.do("LRANGE", "lrange", 0, 1)
+    db.do("LLEN", "lrange")
 
     asyncore.loop()
 
