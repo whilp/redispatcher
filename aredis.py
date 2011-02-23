@@ -87,19 +87,28 @@ class Redis(asyncore.dispatcher):
 
     def handle_read(self):
         chunk = self.recv(8192)
+        self.inbuf += chunk
+        if self.inbuf:
+            self.dispatch()
+
+    def dispatch(self):
         if self.replyhandler is None:
-            firstbyte = self.inbuf and self.inbuf[0] or chunk[0]
+            firstbyte = self.inbuf[0]
             try:
                 self.replyhandler = self.replyhandlers[firstbyte]
             except KeyError:
+                pass
+            if self.replyhandler is None:
                 raise HandlerError(
-                        "unrecognized handler for reply type %r" % chunk[0])
-            chunk = chunk[1:]
+                        "unrecognized handler for reply type %r" % firstbyte)
+            self.inbuf = self.inbuf[1:]
 
-        self.replyhandler(self, chunk)
+        result = True
+        if self.replyhandler(self) is not None:
+            self.replyhandler = None
+            self.dispatch()
 
-    def handle_singleline_reply(self, chunk):
-        self.inbuf += chunk
+    def handle_singleline_reply(self):
         idx = self.inbuf.find(self.terminator)
         if idx < 0:
             return
@@ -110,12 +119,14 @@ class Redis(asyncore.dispatcher):
         getLogger("%s.wire.receive" % name).debug("%r", reply)
         getLogger("%s.protocol.receive" % name).debug("%r", reply.strip())
 
+        return reply
+
     replyhandlers = {
         '+': handle_singleline_reply,
-        #'-': handle_error_reply,
-        #':': handle_integer_reply,
-        #'$': handle_bulk_reply,
-        #'*': handle_multibulk_reply,
+        '-': None, # handle_error_reply,
+        ':': None, # handle_integer_reply,
+        '$': None, # handle_bulk_reply,
+        '*': None, # handle_multibulk_reply,
     }
 
 def parseargs(argv):
