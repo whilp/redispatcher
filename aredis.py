@@ -30,6 +30,7 @@ class Redis(asyncore.dispatcher):
         asyncore.dispatcher.__init__(self, sock=sock, map=map)
         self.outbuf = ''
         self.inbuf = ''
+        self.replytype = None
 
     def connect(self, host="localhost", port=6379, db=0):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -72,6 +73,21 @@ class Redis(asyncore.dispatcher):
     def handle_write(self):
         sent = self.send(self.outbuf)
         self.outbuf = self.outbuf[sent:]
+
+    def handle_read(self):
+        chunk = self.recv(8192)
+        if self.replytype is None:
+            # XXX: Handle unknown reply type.
+            self.replytype = self.replytypes[chunk[0]]
+            chunk = chunk[1:]
+
+        if self.replytype is "singleline":
+            idx = chunk.find(self.terminator)
+            if idx >= 0:
+                reply = self.inbuf + chunk[:idx]
+                chunk = chunk[idx:]
+                logging.getLogger("%s.protocol.receive" % log.name).debug(
+                    reply)
 
 def parseargs(argv):
     """Parse command line arguments.
@@ -138,7 +154,6 @@ def main(argv, stdin=None, stdout=None, stderr=None):
     db = Redis()
     db.connect()
     db.do("SELECT", 0)
-    db.do("SET", "mykey", "myvalue")
 
     asyncore.loop()
 
