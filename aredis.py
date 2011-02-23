@@ -128,7 +128,10 @@ class Redis(asyncore.dispatcher):
         reply = self.handle_singleline_reply()[4:]
         raise ReplyError(reply)
 
-    handle_integer_reply = None
+    def handle_integer_reply(self):
+        reply = self.handle_singleline_reply()
+        return int(reply)
+
     handle_bulk_reply = None
     handle_multibulk_reply = None
 
