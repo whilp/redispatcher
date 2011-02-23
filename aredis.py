@@ -103,7 +103,6 @@ class Redis(asyncore.dispatcher):
                         "unrecognized handler for reply type %r" % firstbyte)
             self.inbuf = self.inbuf[1:]
 
-        result = True
         if self.replyhandler(self) is not None:
             self.replyhandler = None
             self.dispatch()
