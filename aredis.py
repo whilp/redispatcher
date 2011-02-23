@@ -32,6 +32,7 @@ class Redis(asyncore.dispatcher):
         self.outbuf = ''
         self.inbuf = ''
         self.replyhandler = None
+        self.firstbyte = None
 
     def connect(self, host="localhost", port=6379, db=0):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -94,14 +95,14 @@ class Redis(asyncore.dispatcher):
 
     def dispatch(self):
         if self.replyhandler is None:
-            firstbyte = self.inbuf[0]
+            self.firstbyte = self.inbuf[0]
             try:
-                self.replyhandler = self.replyhandlers[firstbyte]
+                self.replyhandler = self.replyhandlers[self.firstbyte]
             except KeyError:
                 pass
             if self.replyhandler is None:
                 raise HandlerError(
-                        "unrecognized handler for reply type %r" % firstbyte)
+                        "unrecognized handler for reply type %r" % self.firstbyte)
             self.inbuf = self.inbuf[1:]
 
         if self.replyhandler(self) is not None:
@@ -117,7 +118,8 @@ class Redis(asyncore.dispatcher):
         reply = self.inbuf[:idx]
         self.inbuf = self.inbuf[idx + len(self.terminator):]
         name = log.name
-        getLogger("%s.wire.receive" % name).debug("%r", reply)
+        getLogger("%s.wire.receive" % name).debug("%r",
+                "%s%s%s" % (self.firstbyte, reply, self.terminator))
         getLogger("%s.protocol.receive" % name).debug("%r", reply.strip())
 
         return reply
