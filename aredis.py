@@ -121,12 +121,17 @@ class Redis(asyncore.dispatcher):
 
         return reply
 
+    handle_error_reply = None
+    handle_integer_reply = None
+    handle_bulk_reply = None
+    handle_multibulk_reply = None
+
     replyhandlers = {
         '+': handle_singleline_reply,
-        '-': None, # handle_error_reply,
-        ':': None, # handle_integer_reply,
-        '$': None, # handle_bulk_reply,
-        '*': None, # handle_multibulk_reply,
+        '-': handle_error_reply,
+        ':': handle_integer_reply,
+        '$': handle_bulk_reply,
+        '*': handle_multibulk_reply,
     }
 
 def parseargs(argv):
