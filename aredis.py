@@ -33,6 +33,7 @@ class Redis(asyncore.dispatcher):
         self.inbuf = ''
         self.replyhandler = None
         self.firstbyte = None
+        self.replylen = None
 
     def connect(self, host="localhost", port=6379, db=0):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -132,7 +133,28 @@ class Redis(asyncore.dispatcher):
         reply = self.handle_singleline_reply()
         return int(reply)
 
-    handle_bulk_reply = None
+    def handle_bulk_reply(self):
+        if self.replylen is None:
+            idx = self.inbuf.find(self.terminator)
+            if idx > 0:
+                replylen = self.inbuf[:idx]
+                self.inbuf = self.inbuf[idx + len(self.terminator):]
+                self.replylen = int(replylen)
+
+        if self.replylen is None or (len(self.inbuf) - 2) < self.replylen:
+            return
+        reply = self.inbuf[:self.replylen]
+        self.inbuf = self.inbuf[self.replylen + len(self.terminator):]
+
+        name = log.name
+        getLogger("%s.wire.receive" % name).debug("%r",
+                self.terminator.join((
+                    "%s%s" % (self.firstbyte, self.replylen),
+                    reply, "")))
+        getLogger("%s.protocol.receive" % name).debug("%r", reply)
+
+        return reply
+
     handle_multibulk_reply = None
 
     replyhandlers = {
