@@ -16,6 +16,9 @@ log.addHandler(NullHandler())
 protolog = logging.getLogger("%s.protocol" % __name__)
 wirelog = logging.getLogger("%s.wire" % __name__)
 
+class Error(Exception): pass
+class HandlerError(Error): pass
+
 class Redis(asyncore.dispatcher):
     terminator = "\r\n"
     replytypes = {
