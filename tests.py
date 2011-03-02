@@ -174,3 +174,29 @@ class TestRedis(BaseTest):
         redis.log_recv("log_recv")
 
         self.assertEqual(self.log.buffer, [])
+
+class TestRedisReader(BaseTest):
+    
+    def setUp(self):
+        BaseTest.setUp(self)
+        self.patched = [
+            Stub(redispatcher.asyncore.dispatcher, "recv").patch(),
+        ]
+        self.redis = Redis()
+
+    def tearDown(self):
+        BaseTest.tearDown(self)
+        for stub in self.patched:
+            stub.unpatch()
+
+    def test_handle_read_incomplete(self):
+        redis = self.redis
+        reader = Stub(redis, "reader").patch()
+        Stub(reader, "gets", returns=False).patch()
+        callbacks = [("command", "args", "callback", "data")]
+        redis.callbacks = callbacks
+
+        result = redis.handle_read()
+
+        self.assertEqual(result, None)
+        self.assertEqual(redis.callbacks, callbacks)
