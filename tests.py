@@ -17,7 +17,7 @@ log.addHandler(NullHandler())
 
 class Stub(object):
     
-    def __init__(self, obj, attr):
+    def __init__(self, obj=None, attr=None):
         self.obj = obj
         self.attr = attr
         self.unpatched = None
