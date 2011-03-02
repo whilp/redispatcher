@@ -175,6 +175,32 @@ class TestRedis(BaseTest):
 
         self.assertEqual(self.log.buffer, [])
 
+class TestRedisWriter(BaseTest):
+    
+    def setUp(self):
+        BaseTest.setUp(self)
+        self.redis = Redis()
+        Stub(self.redis, "send", returns=[0]).patch()
+        self.redis.buffer = self.buffer = "buffer"
+
+    def test_handle_write_none(self):
+        redis = self.redis
+
+        result = redis.handle_write()
+
+        self.assertEqual(result, None)
+        self.assertEqual(redis.buffer, self.buffer)
+        self.assertEqual(redis.send.called, [((self.buffer,), {})])
+
+    def test_handle_write_some(self):
+        redis = self.redis
+        sent = 3
+        Stub(redis, "send", returns=[sent]).patch()
+
+        result = redis.handle_write()
+
+        self.assertEqual(redis.buffer, self.buffer[sent:])
+
 class TestRedisReader(BaseTest):
     
     def setUp(self):
