@@ -193,8 +193,7 @@ class TestRedisReader(BaseTest):
     def test_handle_read_incomplete(self):
         redis = self.redis
         Stub(redis.reader, "gets", returns=False).patch()
-        callbacks = [("command", "args", "callback", "data")]
-        redis.callbacks = callbacks
+        redis.callbacks = callbacks = [("command", "args", "callback", "data")]
 
         result = redis.handle_read()
 
@@ -206,6 +205,8 @@ class TestRedisReader(BaseTest):
         error = redispatcher.ProtocolError
         Stub(redis.reader, "gets", raises=error()).patch()
         Stub(redis, "close").patch()
+        redis.callbacks = callbacks = [("command", "args", "callback", "data")]
 
         self.assertRaises(error, redis.handle_read)
         self.assertEqual(len(redis.close.called), 1)
+        self.assertEqual(redis.callbacks, callbacks)
