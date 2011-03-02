@@ -1,1 +1,2 @@
+include README.rst
 recursive-include docs *.bat *.rst *.py *.png Makefile *.txt
