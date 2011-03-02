@@ -121,7 +121,6 @@ class DebugRedis(Redis):
     def log_recv(self, reply):
         logging.getLogger("%s.client.rx" % __name__).debug("%r", reply)
 
-
 def parseargs(argv):
     """Parse command line arguments.
 
