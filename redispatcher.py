@@ -51,8 +51,11 @@ class Redis(asyncore.dispatcher):
         self.buffer = ''
         self.reader = hiredis.Reader()
 
-    def connect(self, host="localhost", port=6379, db=0, callback=None, data=None):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    def connect(self, host="localhost", port=6379, db=0, callback=None,
+            data=None, sock=None):
+        self.socket = sock
+        if sock is None:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         asyncore.dispatcher.connect(self, (host, port))
         self.socket.setblocking(0)
         self.set_socket(self.socket, self._map)
