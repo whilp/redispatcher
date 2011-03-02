@@ -145,3 +145,13 @@ class TestRedis(BaseTest):
             socket.unpatch()
 
         self.assertEqual(len(socket.called), 1)
+
+    def test_do(self):
+        redis = Redis()
+
+        redis.do("callback", "data", "command", "arg1", "arg2")
+
+        self.assertEqual(redis.buffer, 
+           "*3\r\n$7\r\ncommand\r\n$4\r\narg1\r\n$4\r\narg2\r\n")
+        self.assertEqual(redis.callbacks, 
+            [('command', ('arg1', 'arg2'), 'callback', 'data')])
