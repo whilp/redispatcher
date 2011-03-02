@@ -183,6 +183,7 @@ class TestRedisReader(BaseTest):
             Stub(redispatcher.asyncore.dispatcher, "recv").patch(),
         ]
         self.redis = Redis()
+        Stub(self.redis, "reader").patch()
 
     def tearDown(self):
         BaseTest.tearDown(self)
@@ -191,8 +192,7 @@ class TestRedisReader(BaseTest):
 
     def test_handle_read_incomplete(self):
         redis = self.redis
-        reader = Stub(redis, "reader").patch()
-        Stub(reader, "gets", returns=False).patch()
+        Stub(redis.reader, "gets", returns=False).patch()
         callbacks = [("command", "args", "callback", "data")]
         redis.callbacks = callbacks
 
