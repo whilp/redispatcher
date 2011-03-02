@@ -118,6 +118,7 @@ class TestRedis(BaseTest):
             Stub(redispatcher.asyncore.dispatcher, "set_socket").patch(),
             Stub(redispatcher.socket, "socket").patch(),
         ]
+        self.redis = Redis()
 
     def tearDown(self):
         BaseTest.tearDown(self)
@@ -128,7 +129,7 @@ class TestRedis(BaseTest):
         redis = Redis()
         
     def test_connect(self):
-        redis = Redis()
+        redis = self.redis
         sock = Stub()
 
         redis.connect(sock=sock, data="data", callback="callback")
@@ -136,7 +137,7 @@ class TestRedis(BaseTest):
         self.assertEqual(redis.callbacks, [("CONNECT", (), "callback", "data")])
 
     def test_connect_build_sock(self):
-        redis = Redis()
+        redis = self.redis
         socket = Stub(redispatcher.socket, "socket").patch()
 
         try:
@@ -147,7 +148,7 @@ class TestRedis(BaseTest):
         self.assertEqual(len(socket.called), 1)
 
     def test_do(self):
-        redis = Redis()
+        redis = self.redis
 
         redis.do("callback", "data", "command", "arg1", "arg2")
 
