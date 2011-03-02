@@ -32,7 +32,7 @@ def wirecmd(command, args, separator="\r\n"):
 def fmtcmd(command, args, separator=' '):
     parts = ["%s"]
     parts.extend("%r" for arg in args)
-    return ' '.join(parts)
+    return separator.join(parts)
 
 def logcmd(name, command, args, log=None, level=logging.DEBUG):
     parts = ["%s"]
