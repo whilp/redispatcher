@@ -1,8 +1,18 @@
+import logging
 import unittest
 
 import redispatcher
 
 from redispatcher import fmtcmd, wirecmd
+
+try:
+    NullHandler = logging.NullHandler
+except AttributeError:
+    class NullHandler(logging.Handler):
+        def emit(self, record): pass
+
+log = logging.getLogger(__name__)
+log.addHandler(NullHandler())
 
 class BaseTest(unittest.TestCase):
     pass
