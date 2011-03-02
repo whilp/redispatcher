@@ -8,6 +8,8 @@ import time
 
 import hiredis
 
+__all__ = ["Redis", "DebugRedis"]
+
 try:
     NullHandler = logging.NullHandler
 except AttributeError:
