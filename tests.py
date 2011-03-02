@@ -21,8 +21,10 @@ class Stub(object):
         self.obj = obj
         self.attr = attr
         self.unpatched = None
-    
+        self.called = []
+
     def __call__(self, *args, **kwargs):
+        self.called.append((args, kwargs))
         return self.__class__(self.obj, self.attr)
 
     def __getattr_(self, attr):
