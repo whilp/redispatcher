@@ -63,16 +63,16 @@ class Redis(asyncore.dispatcher):
         self.callbacks.insert(1, (command, args, callback, data))
 
     def log(self, message):
-        log.debug(message)
+        pass
 
     def log_info(self, message, type=None):
-        log.debug(message)
+        pass
 
     def log_send(self, command, args):
-        logcmd("%s.client.tx" % __name__, command, args)
+        pass
 
     def log_recv(self, reply):
-        logging.getLogger("%s.client.rx" % __name__).debug("%r", reply)
+        pass
 
     def handle_connect(self): pass
 
@@ -99,6 +99,21 @@ class Redis(asyncore.dispatcher):
             command, args, callback, data = self.callbacks.pop()
             if callback is not None:
                 callback(command, args, data, reply)
+
+class DebugRedis(Redis):
+
+    def log(self, message):
+        log.debug(message)
+
+    def log_info(self, message, type=None):
+        log.debug(message)
+
+    def log_send(self, command, args):
+        logcmd("%s.client.tx" % __name__, command, args)
+
+    def log_recv(self, reply):
+        logging.getLogger("%s.client.rx" % __name__).debug("%r", reply)
+
 
 def parseargs(argv):
     """Parse command line arguments.
@@ -170,6 +185,7 @@ def main(argv, stdin=None, stdout=None, stderr=None):
         seconds = time.time() - start
         cmd = fmtcmd(command, args) % ((command,) + args)
         log.debug("Ran %s in %g seconds", cmd, seconds)
+        log.debug("Received: %r", reply)
 
     for line in stdin:
         splitted = shlex.split(line)
