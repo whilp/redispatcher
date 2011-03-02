@@ -8,7 +8,9 @@ import time
 
 import hiredis
 
-__all__ = ["Redis", "DebugRedis"]
+__all__ = ["Redis", "DebugRedis", "ProtocolError"]
+
+ProtocolError = hiredis.ProtocolError
 
 try:
     NullHandler = logging.NullHandler
@@ -94,7 +96,7 @@ class Redis(asyncore.dispatcher):
         while True:
             try:
                 reply = self.reader.gets()
-            except hiredis.ProtocolError:
+            except ProtocolError:
                 self.close()
                 raise
             if reply is False:
