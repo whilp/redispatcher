@@ -27,7 +27,7 @@ class Stub(object):
         self.called.append((args, kwargs))
         return self.__class__(self.obj, self.attr)
 
-    def __getattr_(self, attr):
+    def __getattr__(self, attr):
         return self.__class__()
 
     def patch(self):
