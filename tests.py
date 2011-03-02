@@ -37,9 +37,11 @@ class Stub(object):
     def __getattr__(self, attr):
         return self.__class__()
 
-    def patch(self):
+    def patch(self, stubs=None):
         self.unpatched = getattr(self.obj, self.attr)
         setattr(self.obj, self.attr, self)
+        if stubs is not None:
+            stubs.append(self)
 
         return self
 
