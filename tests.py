@@ -17,7 +17,7 @@ log.addHandler(NullHandler())
 
 class Stub(object):
     
-    def __init__(self, obj=None, attr=None, returns=None, raises=None):
+    def __init__(self, obj=None, attr=None, returns=[], raises=[]):
         self.obj = obj
         self.attr = attr
         self.unpatched = None
@@ -27,10 +27,10 @@ class Stub(object):
 
     def __call__(self, *args, **kwargs):
         self.called.append((args, kwargs))
-        if self.raises is not None:
-            raise self.raises
-        elif self.returns is not None:
-            return self.returns
+        if self.raises:
+            raise self.raises.pop(0)
+        elif self.returns:
+            return self.returns.pop(0)
             
         return self.__class__(self.obj, self.attr)
 
@@ -193,7 +193,7 @@ class TestRedisReader(BaseTest):
 
     def test_handle_read_incomplete(self):
         redis = self.redis
-        Stub(redis.reader, "gets", returns=False).patch()
+        Stub(redis.reader, "gets", returns=[False]).patch()
 
         result = redis.handle_read()
 
@@ -203,7 +203,7 @@ class TestRedisReader(BaseTest):
     def test_handle_read_exception(self):
         redis = self.redis
         error = redispatcher.ProtocolError
-        Stub(redis.reader, "gets", raises=error()).patch()
+        Stub(redis.reader, "gets", raises=[error()]).patch()
         Stub(redis, "close").patch()
 
         self.assertRaises(error, redis.handle_read)
