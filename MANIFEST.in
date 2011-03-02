@@ -1,0 +1,1 @@
+recursive-include docs *.bat *.rst *.py *.png Makefile *.txt
