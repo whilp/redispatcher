@@ -195,10 +195,13 @@ def main(argv, stdin=None, stdout=None, stderr=None):
 
     asyncore.loop()
 
-if __name__ == "__main__": # pragma: nocover
+def run():
     try:
         ret = main(sys.argv, sys.stdin, sys.stdout, sys.stderr)
     except KeyboardInterrupt:
         ret = None
 
     sys.exit(ret)
+
+if __name__ == "__main__": # pragma: nocover
+    run()
