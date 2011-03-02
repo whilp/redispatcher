@@ -120,11 +120,15 @@ class TestRedis(BaseTest):
             self.socket,
         ]
         self.redis = Redis()
+        self.log = tmplog()
+        self.log.orig = redispatcher.log
+        redispatcher.log = self.log
 
     def tearDown(self):
         BaseTest.tearDown(self)
         for stub in self.patched:
             stub.unpatch()
+        redispatcher.log = self.log.orig
 
     def test_init(self):
         redis = Redis()
@@ -153,3 +157,13 @@ class TestRedis(BaseTest):
            "*3\r\n$7\r\ncommand\r\n$4\r\narg1\r\n$4\r\narg2\r\n")
         self.assertEqual(redis.callbacks, 
             [('command', ('arg1', 'arg2'), 'callback', 'data')])
+
+    def test_log_silent(self):
+        redis = self.redis
+
+        redis.log("log")
+        redis.log_info("log_info")
+        redis.log_send("log_send", ())
+        redis.log_recv("log_recv")
+
+        self.assertEqual(self.log.buffer, [])
