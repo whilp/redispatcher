@@ -4,7 +4,7 @@ import unittest
 
 import redispatcher
 
-from redispatcher import fmtcmd, logcmd, wirecmd
+from redispatcher import Redis, fmtcmd, logcmd, wirecmd
 
 try:
     NullHandler = logging.NullHandler
@@ -107,3 +107,41 @@ class TestLogging(BaseTest):
         record = self.log.buffer[0]
         self.assertEqual(record.msg, "%s %r %r")
         self.assertEqual(record.args, ("COMMAND", "arg1", "arg2"))
+
+class TestRedis(BaseTest):
+    
+    def setUp(self):
+        BaseTest.setUp(self)
+        self.patched = [
+            Stub(redispatcher.asyncore.dispatcher, "__init__").patch(),
+            Stub(redispatcher.asyncore.dispatcher, "connect").patch(),
+            Stub(redispatcher.asyncore.dispatcher, "set_socket").patch(),
+            Stub(redispatcher.socket, "socket").patch(),
+        ]
+
+    def tearDown(self):
+        BaseTest.tearDown(self)
+        for stub in self.patched:
+            stub.unpatch()
+
+    def test_init(self):
+        redis = Redis()
+        
+    def test_connect(self):
+        redis = Redis()
+        sock = Stub()
+
+        redis.connect(sock=sock, data="data", callback="callback")
+
+        self.assertEqual(redis.callbacks, [("CONNECT", (), "callback", "data")])
+
+    def test_connect_build_sock(self):
+        redis = Redis()
+        socket = Stub(redispatcher.socket, "socket").patch()
+
+        try:
+            redis.connect()
+        finally:
+            socket.unpatch()
+
+        self.assertEqual(len(socket.called), 1)
