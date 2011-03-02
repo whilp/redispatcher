@@ -200,3 +200,12 @@ class TestRedisReader(BaseTest):
 
         self.assertEqual(result, None)
         self.assertEqual(redis.callbacks, callbacks)
+
+    def test_handle_read_exception(self):
+        redis = self.redis
+        error = redispatcher.ProtocolError
+        Stub(redis.reader, "gets", raises=error()).patch()
+        Stub(redis, "close").patch()
+
+        self.assertRaises(error, redis.handle_read)
+        self.assertEqual(len(redis.close.called), 1)
