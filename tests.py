@@ -112,11 +112,12 @@ class TestRedis(BaseTest):
     
     def setUp(self):
         BaseTest.setUp(self)
+        self.socket = Stub(redispatcher.socket, "socket").patch()
         self.patched = [
             Stub(redispatcher.asyncore.dispatcher, "__init__").patch(),
             Stub(redispatcher.asyncore.dispatcher, "connect").patch(),
             Stub(redispatcher.asyncore.dispatcher, "set_socket").patch(),
-            Stub(redispatcher.socket, "socket").patch(),
+            self.socket,
         ]
         self.redis = Redis()
 
@@ -138,14 +139,10 @@ class TestRedis(BaseTest):
 
     def test_connect_build_sock(self):
         redis = self.redis
-        socket = Stub(redispatcher.socket, "socket").patch()
 
-        try:
-            redis.connect()
-        finally:
-            socket.unpatch()
+        redis.connect()
 
-        self.assertEqual(len(socket.called), 1)
+        self.assertEqual(len(self.socket.called), 1)
 
     def test_do(self):
         redis = self.redis
