@@ -17,14 +17,21 @@ log.addHandler(NullHandler())
 
 class Stub(object):
     
-    def __init__(self, obj=None, attr=None):
+    def __init__(self, obj=None, attr=None, returns=None, raises=None):
         self.obj = obj
         self.attr = attr
         self.unpatched = None
         self.called = []
+        self.returns = returns
+        self.raises = raises
 
     def __call__(self, *args, **kwargs):
         self.called.append((args, kwargs))
+        if self.raises is not None:
+            raise self.raises
+        elif self.returns is not None:
+            return self.returns
+            
         return self.__class__(self.obj, self.attr)
 
     def __getattr__(self, attr):
