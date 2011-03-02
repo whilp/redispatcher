@@ -15,6 +15,29 @@ except AttributeError:
 log = logging.getLogger(__name__)
 log.addHandler(NullHandler())
 
+class Stub(object):
+    
+    def __init__(self, obj, attr):
+        self.obj = obj
+        self.attr = attr
+        self.unpatched = None
+    
+    def __call__(self, *args, **kwargs):
+        return self.__class__(self.obj, self.attr)
+
+    def __getattr_(self, attr):
+        return self.__class__()
+
+    def patch(self):
+        self.unpatched = getattr(self.obj, self.attr)
+        setattr(self.obj, self.attr, self)
+
+        return self
+
+    def unpatch(self):
+        setattr(self.obj, self.attr, self.unpatched)
+        self.unpatched = None
+
 class BaseTest(unittest.TestCase):
     pass
 
