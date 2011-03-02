@@ -209,3 +209,15 @@ class TestRedisReader(BaseTest):
         self.assertRaises(error, redis.handle_read)
         self.assertEqual(len(redis.close.called), 1)
         self.assertEqual(redis.callbacks, self.callbacks)
+
+    def test_handle_read_callback(self):
+        redis = self.redis
+        Stub(redis.reader, "gets", returns=["reply", False]).patch()
+        callback = Stub()
+        redis.callbacks = [("command", "args", callback, "data")]
+
+        result = redis.handle_read()
+
+        self.assertEqual(redis.callbacks, [])
+        self.assertEqual(callback.called,
+            [(('command', 'args', 'data', 'reply'), {})])
