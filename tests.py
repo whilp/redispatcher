@@ -4,7 +4,7 @@ import unittest
 
 import redispatcher
 
-from redispatcher import Redis, fmtcmd, logcmd, wirecmd
+from redispatcher import DebugRedis, Redis, fmtcmd, logcmd, wirecmd
 
 try:
     NullHandler = logging.NullHandler
@@ -242,3 +242,66 @@ class TestRedisReader(BaseTest):
         self.assertEqual(redis.callbacks, [])
         self.assertEqual(callback.called,
             [(('command', 'args', 'data', 'reply'), {})])
+
+class TestDebugRedis(BaseTest):
+    
+    def setUp(self):
+        self.redis = DebugRedis()
+        self.log = tmplog()
+        self.log.level = logging.DEBUG
+        self.log.orig = redispatcher.log
+        redispatcher.log = self.log
+
+        self.patched = []
+
+    def tearDown(self):
+        redispatcher.log = self.log.orig
+        for stub in self.patched:
+            stub.unpatch()
+
+    def test_log(self):
+        redis = self.redis
+        message = "message"
+
+        result = redis.log(message)
+
+        self.assertEqual(result, None)
+        self.assertEqual(len(self.log.buffer), 1)
+        record = self.log.buffer[0]
+        self.assertEqual(record.msg, message)
+        self.assertEqual(record.args, ())
+
+    def test_log_info(self):
+        redis = self.redis
+        message = "message"
+
+        result = redis.log_info(message)
+
+        self.assertEqual(result, None)
+        self.assertEqual(len(self.log.buffer), 1)
+        record = self.log.buffer[0]
+        self.assertEqual(record.msg, message)
+        self.assertEqual(record.args, ())
+
+    def test_log_send(self):
+        redis = self.redis
+        logcmd = Stub(redispatcher, "logcmd").patch(self.patched)
+
+        result = redis.log_send("command", "args")
+
+        self.assertEqual(result, None)
+        self.assertEqual(logcmd.called, 
+            [(('redispatcher.client.tx', 'command', 'args'), {})])
+
+    def test_log_recv(self):
+        redis = self.redis
+        getLogger = Stub(logging, "getLogger", returns=[self.log]).patch(self.patched)
+        message = "reply"
+
+        result = redis.log_recv(message)
+
+        self.assertEqual(result, None)
+        self.assertEqual(len(self.log.buffer), 1)
+        record = self.log.buffer[0]
+        self.assertEqual(record.msg, "%r")
+        self.assertEqual(record.args, (message,))
