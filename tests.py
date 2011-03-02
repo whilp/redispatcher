@@ -179,17 +179,10 @@ class TestRedisReader(BaseTest):
     
     def setUp(self):
         BaseTest.setUp(self)
-        self.patched = [
-            Stub(redispatcher.asyncore.dispatcher, "recv").patch(),
-        ]
         self.redis = Redis()
+        Stub(self.redis, "recv").patch()
         Stub(self.redis, "reader").patch()
         self.redis.callbacks = self.callbacks = [("command", "args", "callback", "data")]
-
-    def tearDown(self):
-        BaseTest.tearDown(self)
-        for stub in self.patched:
-            stub.unpatch()
 
     def test_handle_read_incomplete(self):
         redis = self.redis
