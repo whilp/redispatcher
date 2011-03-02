@@ -75,27 +75,33 @@ class TestUtils(BaseTest):
 
         self.assertEquals(result, "%s!%r!%r")
 
+def tmplog(name="tmp", size=100):
+    log = logging.getLogger(name)
+    log.propagate = 0
+    buffer = logging.handlers.BufferingHandler(size)
+    log.addHandler(buffer)
+    log.buffer = buffer.buffer
+
+    return log
+
 class TestLogging(BaseTest):
 
     def setUp(self):
-        self.log = log = logging.getLogger("tmp")
-        log.propagate = 0
-        buffer = logging.handlers.BufferingHandler(100)
-        log.addHandler(buffer)
-        self.buffer = buffer.buffer
+        BaseTest.setUp(self)
+        self.log = tmplog()
 
     def test_logcmd_explicit_logger(self):
         logcmd(None, "COMMAND", ("arg1", "arg2"), log=self.log)
 
-        self.assertEqual(len(self.buffer), 1)
-        record = self.buffer[0]
+        self.assertEqual(len(self.log.buffer), 1)
+        record = self.log.buffer[0]
         self.assertEqual(record.msg, "%s %r %r")
         self.assertEqual(record.args, ("COMMAND", "arg1", "arg2"))
 
     def test_logcmd_get_logger(self):
         logcmd("tmp", "COMMAND", ("arg1", "arg2"))
 
-        self.assertEqual(len(self.buffer), 1)
-        record = self.buffer[0]
+        self.assertEqual(len(self.log.buffer), 1)
+        record = self.log.buffer[0]
         self.assertEqual(record.msg, "%s %r %r")
         self.assertEqual(record.args, ("COMMAND", "arg1", "arg2"))
